@@ -24,6 +24,7 @@ def anchor_targets_bbox(
     mask_shape=None,
     negative_overlap=0.4,
     positive_overlap=0.5,
+    num_attributes=64,
     **kwargs
 ):
     """ Generate anchor targets for bbox detection.
@@ -45,6 +46,7 @@ def anchor_targets_bbox(
 
     # label: 1 is positive, 0 is negative, -1 is dont care
     labels = np.ones((anchors.shape[0], num_classes)) * -1
+    attributes = np.zeros((anchors.shape[0], num_attributes))
 
     if annotations.shape[0]:
         # obtain indices of gt annotations with the greatest overlap
@@ -62,6 +64,8 @@ def anchor_targets_bbox(
         positive_indices = max_overlaps >= positive_overlap
         labels[positive_indices, :] = 0
         labels[positive_indices, annotations[positive_indices, 4].astype(int)] = 1
+        if annotations.shape[1] == 69:
+            attributes[positive_indices, :] = annotations[positive_indices, 5:].astype(int)
     else:
         # no annotations? then everything is background
         labels[:] = 0
@@ -72,6 +76,8 @@ def anchor_targets_bbox(
     anchors_centers    = np.vstack([(anchors[:, 0] + anchors[:, 2]) / 2, (anchors[:, 1] + anchors[:, 3]) / 2]).T
     indices            = np.logical_or(anchors_centers[:, 0] >= mask_shape[1], anchors_centers[:, 1] >= mask_shape[0])
     labels[indices, :] = -1
+    if annotations.shape[1] == 69:
+        return labels, annotations, anchors, attributes
 
     return labels, annotations, anchors
 

@@ -82,7 +82,7 @@ def model_with_weights(model, weights, skip_mismatch):
     return model
 
 
-def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0, freeze_backbone=False):
+def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0, freeze_backbone=False, num_attributes = None):
     """ Creates three models (model, training_model, prediction_model).
 
     Args
@@ -101,25 +101,47 @@ def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0, freeze_
 
     # Keras recommends initialising a multi-gpu model on the CPU to ease weight sharing, and to prevent OOM errors.
     # optionally wrap in a parallel model
-    if multi_gpu > 1:
-        with tf.device('/cpu:0'):
-            model = model_with_weights(backbone_retinanet(num_classes, modifier=modifier), weights=weights, skip_mismatch=True)
-        training_model = multi_gpu_model(model, gpus=multi_gpu)
+    if num_attributes is None:
+        if multi_gpu > 1:
+            with tf.device('/cpu:0'):
+                model = model_with_weights(backbone_retinanet(num_classes, modifier=modifier), weights=weights, skip_mismatch=True)
+            training_model = multi_gpu_model(model, gpus=multi_gpu)
+        else:
+            model          = model_with_weights(backbone_retinanet(num_classes, modifier=modifier), weights=weights, skip_mismatch=True)
+            training_model = model
+
+        # make prediction model
+        prediction_model = retinanet_bbox(model=model)
+
+        # compile model
+        training_model.compile(
+            loss={
+                'regression'    : losses.smooth_l1(),
+                'classification': losses.focal()
+            },
+            optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001)
+        )
     else:
-        model          = model_with_weights(backbone_retinanet(num_classes, modifier=modifier), weights=weights, skip_mismatch=True)
-        training_model = model
+        if multi_gpu > 1:
+            with tf.device('/cpu:0'):
+                model = model_with_weights(backbone_retinanet(num_classes, num_attributes, modifier=modifier), weights=weights, skip_mismatch=True)
+            training_model = multi_gpu_model(model, gpus=multi_gpu)
+        else:
+            model = model_with_weights(backbone_retinanet(num_classes, num_attributes, modifier=modifier), weights=weights, skip_mismatch=True)
+            training_model = model
 
-    # make prediction model
-    prediction_model = retinanet_bbox(model=model)
+        # make prediction model
+        prediction_model = retinanet_bbox(model=model)
 
-    # compile model
-    training_model.compile(
-        loss={
-            'regression'    : losses.smooth_l1(),
-            'classification': losses.focal()
-        },
-        optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001)
-    )
+        # compile model
+        training_model.compile(
+            loss={
+                'regression': losses.smooth_l1(),
+                'classification': losses.focal(),
+                'attributes': losses.focal()
+            },
+            optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001)
+        )
 
     return model, training_model, prediction_model
 
@@ -176,6 +198,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
                 '{backbone}_{dataset_type}_{{epoch:02d}}.h5'.format(backbone=args.backbone, dataset_type=args.dataset_type)
             ),
             verbose=1,
+            period=1,
             # save_best_only=True,
             # monitor="mAP",
             # mode='max'
@@ -185,7 +208,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
 
     callbacks.append(keras.callbacks.ReduceLROnPlateau(
         monitor  = 'loss',
-        factor   = 0.1,
+        factor   = 0.5,
         patience = 2,
         verbose  = 1,
         mode     = 'auto',
@@ -240,7 +263,7 @@ def create_generators(args):
     elif args.dataset_type == 'pascal':
         train_generator = PascalVocGenerator(
             args.pascal_path,
-            'trainval',
+            'train',
             transform_generator=transform_generator,
             batch_size=args.batch_size,
             image_min_side=args.image_min_side,
@@ -249,7 +272,7 @@ def create_generators(args):
 
         validation_generator = PascalVocGenerator(
             args.pascal_path,
-            'test',
+            'val',
             batch_size=args.batch_size,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side
@@ -358,7 +381,7 @@ def parse_args(args):
     """
     parser     = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
     subparsers = parser.add_subparsers(help='Arguments for specific dataset types.', dest='dataset_type')
-    subparsers.required = True
+    # subparsers.required = True
 
     coco_parser = subparsers.add_parser('coco')
     coco_parser.add_argument('coco_path', help='Path to dataset directory (ie. /tmp/COCO).')
@@ -415,6 +438,12 @@ def main(args=None):
         args = sys.argv[1:]
     args = parse_args(args)
 
+    # Change the dataset type and path here
+    # args.dataset_type = 'coco'
+    # args.coco_path = '../../datasets/coco'
+    args.dataset_type = 'pascal'
+    args.pascal_path = '../../apascal/VOC2008'
+
     # create object that stores backbone information
     backbone = models.backbone(args.backbone)
 
@@ -428,7 +457,7 @@ def main(args=None):
 
     # create the generators
     train_generator, validation_generator = create_generators(args)
-
+    args.snapshot = 'snapshots/resnet50_pascal_15.h5'
     # create the model
     if args.snapshot is not None:
         print('Loading model, this may take a second...')
@@ -445,6 +474,7 @@ def main(args=None):
         model, training_model, prediction_model = create_models(
             backbone_retinanet=backbone.retinanet,
             num_classes=train_generator.num_classes(),
+            num_attributes=train_generator.num_attributes(),
             weights=weights,
             multi_gpu=args.multi_gpu,
             freeze_backbone=args.freeze_backbone

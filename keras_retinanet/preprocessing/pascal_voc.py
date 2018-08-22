@@ -16,11 +16,13 @@ limitations under the License.
 
 from ..preprocessing.generator import Generator
 from ..utils.image import read_image_bgr
+from ..utils.anchors import bbox_transform
 
 import os
 import numpy as np
 from six import raise_from
 from PIL import Image
+import keras
 
 try:
     import xml.etree.cElementTree as ET
@@ -91,7 +93,8 @@ class PascalVocGenerator(Generator):
         self.data_dir             = data_dir
         self.set_name             = set_name
         self.classes              = classes
-        self.image_names          = [l.strip().split(None, 1)[0] for l in open(os.path.join(data_dir, 'ImageSets', 'Main', set_name + '.txt')).readlines()]
+        self.attributes = self.read_attributes()
+        self.image_names          = [l.strip().split(None, 1)[0] for l in open(os.path.join(data_dir, 'ImageSets', 'Layout', set_name + '.txt')).readlines()]
         self.image_extension      = image_extension
         self.skip_truncated       = skip_truncated
         self.skip_difficult       = skip_difficult
@@ -100,7 +103,27 @@ class PascalVocGenerator(Generator):
         for key, value in self.classes.items():
             self.labels[value] = key
 
+        self.attr_labels = {}
+        for key, value in self.attributes.items():
+            self.attr_labels[value] = key
+
         super(PascalVocGenerator, self).__init__(**kwargs)
+
+    def read_attributes(self):
+        attributes = {}
+        attr = [l.strip() for l in open(os.path.join(self.data_dir, 'attribute_names.txt')).readlines()]
+        for label, name in enumerate(attr):
+            attributes[name] = label
+        return attributes
+
+    def num_attributes(self):
+        return len(self.attributes)
+
+    def attr_to_label(self, attr):
+        return self.attributes[attr]
+
+    def label_to_attr(self, label):
+        return self.attr_labels[label]
 
     def size(self):
         """ Size of the dataset.
@@ -135,6 +158,41 @@ class PascalVocGenerator(Generator):
         path = os.path.join(self.data_dir, 'JPEGImages', self.image_names[image_index] + self.image_extension)
         return read_image_bgr(path)
 
+    def compute_targets(self, image_group, annotations_group):
+        """ Compute target outputs for the network using images and their annotations.
+        """
+        # get the max image shape
+        max_shape = tuple(max(image.shape[x] for image in image_group) for x in range(3))
+
+        labels_group = [None] * self.batch_size
+        regression_group = [None] * self.batch_size
+        attribute_group = [None] * self.batch_size
+
+        for index, (image, annotations) in enumerate(zip(image_group, annotations_group)):
+            # compute regression targets
+            labels_group[index], annotations, anchors, attribute_group[index] = self.compute_anchor_targets(
+                max_shape,
+                annotations,
+                self.num_classes(),
+                mask_shape=image.shape,
+                num_attributes=self.num_attributes()
+            )
+        regression_group[index] = bbox_transform(anchors, annotations)
+
+        anchor_states = np.max(labels_group[index], axis=1, keepdims=True)
+        regression_group[index] = np.append(regression_group[index], anchor_states, axis=1)
+
+        labels_batch     = np.zeros((self.batch_size,) + labels_group[0].shape, dtype=keras.backend.floatx())
+        regression_batch = np.zeros((self.batch_size,) + regression_group[0].shape, dtype=keras.backend.floatx())
+        attributes_batch = np.zeros((self.batch_size,) + attribute_group[0].shape, dtype=keras.backend.floatx())
+
+        for index, (labels, regression, attributes) in enumerate(zip(labels_group, regression_group, attribute_group)):
+            labels_batch[index, ...]     = labels
+            regression_batch[index, ...] = regression
+            attributes_batch[index, ...] = attributes
+
+        return [regression_batch, labels_batch, attributes_batch]
+
     def __parse_annotation(self, element):
         """ Parse an annotation given an XML element.
         """
@@ -144,22 +202,28 @@ class PascalVocGenerator(Generator):
         class_name = _findNode(element, 'name').text
         if class_name not in self.classes:
             raise ValueError('class name \'{}\' not found in classes: {}'.format(class_name, list(self.classes.keys())))
+        temp_attribute = np.zeros(64)
+        for attribute in element.iter('attribute'):
+            label = self.attr_to_label(attribute.text)
+            temp_attribute[label] = 1
 
-        box = np.zeros((1, 5))
+        box = np.zeros((1, 69))
         box[0, 4] = self.name_to_label(class_name)
 
         bndbox    = _findNode(element, 'bndbox')
-        box[0, 0] = _findNode(bndbox, 'xmin', 'bndbox.xmin', parse=float) - 1
-        box[0, 1] = _findNode(bndbox, 'ymin', 'bndbox.ymin', parse=float) - 1
-        box[0, 2] = _findNode(bndbox, 'xmax', 'bndbox.xmax', parse=float) - 1
-        box[0, 3] = _findNode(bndbox, 'ymax', 'bndbox.ymax', parse=float) - 1
+        box[0, 0] = _findNode(bndbox, 'xmin', 'bndbox.xmin', parse=float)
+        box[0, 1] = _findNode(bndbox, 'ymin', 'bndbox.ymin', parse=float)
+        box[0, 2] = _findNode(bndbox, 'xmax', 'bndbox.xmax', parse=float)
+        box[0, 3] = _findNode(bndbox, 'ymax', 'bndbox.ymax', parse=float)
+
+        box[0, 5:] = temp_attribute
 
         return truncated, difficult, box
 
     def __parse_annotations(self, xml_root):
         """ Parse all annotations under the xml_root.
         """
-        boxes = np.zeros((0, 5))
+        boxes = np.zeros((0, 69))
         for i, element in enumerate(xml_root.iter('object')):
             try:
                 truncated, difficult, box = self.__parse_annotation(element)
@@ -179,7 +243,7 @@ class PascalVocGenerator(Generator):
         """
         filename = self.image_names[image_index] + '.xml'
         try:
-            tree = ET.parse(os.path.join(self.data_dir, 'Annotations', filename))
+            tree = ET.parse(os.path.join(self.data_dir, 'xml', filename))
             return self.__parse_annotations(tree.getroot())
         except ET.ParseError as e:
             raise_from(ValueError('invalid annotations file: {}: {}'.format(filename, e)), None)

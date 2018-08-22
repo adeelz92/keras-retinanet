@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import keras
+from keras.utils import get_file
 import keras_resnet
 import keras_resnet.models
 from . import retinanet
@@ -50,7 +51,7 @@ class ResNetBackbone(Backbone):
         elif depth == 152:
             checksum = '6ee11ef2b135592f8031058820bb9e71'
 
-        return keras.applications.imagenet_utils.get_file(
+        return get_file(
             filename,
             resource,
             cache_subdir='models',
@@ -67,7 +68,7 @@ class ResNetBackbone(Backbone):
             raise ValueError('Backbone (\'{}\') not in allowed backbones ({}).'.format(backbone, allowed_backbones))
 
 
-def resnet_retinanet(num_classes, backbone='resnet50', inputs=None, modifier=None, **kwargs):
+def resnet_retinanet(num_classes, num_attributes = None, backbone='resnet50', inputs=None, modifier=None, **kwargs):
     """ Constructs a retinanet model using a resnet backbone.
 
     Args
@@ -98,7 +99,7 @@ def resnet_retinanet(num_classes, backbone='resnet50', inputs=None, modifier=Non
         resnet = modifier(resnet)
 
     # create the full model
-    return retinanet.retinanet(inputs=inputs, num_classes=num_classes, backbone_layers=resnet.outputs[1:], **kwargs)
+    return retinanet.retinanet(inputs=inputs, num_classes=num_classes, num_attributes=num_attributes, backbone_layers=resnet.outputs[1:], **kwargs)
 
 
 def resnet50_retinanet(num_classes, inputs=None, **kwargs):
