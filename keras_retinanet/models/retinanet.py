@@ -21,163 +21,13 @@ from .. import layers
 import numpy as np
 
 
-def build_submodels(
-        num_classes,
-        num_attributes,
-        num_anchors,
-        pyramid_feature_size=256,
-        prior_probability=0.01,
-        classification_feature_size=256,
-        name='attributes_submodel'
-):
-    """ Creates the attributes, regression and class submodels
-    """
-    options = {
-        'kernel_size': 3,
-        'strides': 1,
-        'padding': 'same',
-    }
-    # Attributes submodel
-    inputs = keras.layers.Input(shape=(None, None, pyramid_feature_size))
-    outputs = inputs
-    for i in range(4):
-        outputs = keras.layers.Conv2D(
-            filters=classification_feature_size,
-            activation='relu',
-            name='pyramid_attribute_{}'.format(i),
-            kernel_initializer=keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
-            bias_initializer='zeros',
-            **options
-        )(outputs)
-    attributes_features = outputs
-    outputs = keras.layers.Conv2D(
-        filters=num_attributes * num_anchors,
-        kernel_initializer=keras.initializers.zeros(),
-        bias_initializer=initializers.PriorProbability(probability=prior_probability),
-        name='pyramid_attributes',
-        **options
-    )(outputs)
-    # reshape output and apply sigmoid
-    outputs = keras.layers.Reshape((-1, num_attributes), name='pyramid_attributes_reshape')(
-        outputs)  # [W*H*64A] -> [WHA, 64]
-    attributes_outputs = keras.layers.Activation('sigmoid', name='pyramid_attributes_sigmoid')(outputs)
-
-    # Classification submodel
-    options = {
-        'kernel_size': 3,
-        'strides': 1,
-        'padding': 'same',
-    }
-    outputs = inputs
-    for i in range(4):
-        outputs = keras.layers.Conv2D(
-            filters=classification_feature_size,
-            activation='relu',
-            name='pyramid_classification_{}'.format(i),
-            kernel_initializer=keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
-            bias_initializer='zeros',
-            **options
-        )(outputs)
-
-    outputs = keras.layers.Concatenate(axis=3)([outputs, attributes_features])
-    outputs = keras.layers.Conv2D(
-        filters=num_classes * num_anchors,
-        kernel_initializer=keras.initializers.zeros(),
-        bias_initializer=initializers.PriorProbability(probability=prior_probability),
-        name='pyramid_classification',
-        **options
-    )(outputs)
-    outputs = keras.layers.Reshape((-1, num_classes), name='pyramid_classification_reshape')(outputs)
-    classification_outputs = keras.layers.Activation('sigmoid', name='pyramid_classification_sigmoid')(outputs)
-
-    # Regression submodel
-    options = {
-        'kernel_size': 3,
-        'strides': 1,
-        'padding': 'same',
-        'kernel_initializer': keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
-        'bias_initializer': 'zeros'
-    }
-    outputs = inputs
-    for i in range(4):
-        outputs = keras.layers.Conv2D(
-            filters=pyramid_feature_size,
-            activation='relu',
-            name='pyramid_regression_{}'.format(i),
-            **options
-        )(outputs)
-    outputs = keras.layers.Concatenate(axis=3)([outputs, attributes_features])
-    outputs = keras.layers.Conv2D(num_anchors * 4, name='pyramid_regression', **options)(outputs)
-    regression_outputs = keras.layers.Reshape((-1, 4), name='pyramid_regression_reshape')(outputs)
-
-    return [
-        ('regression', keras.models.Model(inputs=inputs, outputs=regression_outputs, name='regression_submodel')),
-        ('classification',
-         keras.models.Model(inputs=inputs, outputs=classification_outputs, name='classification_submodel')),
-        ('attributes',
-         keras.models.Model(inputs=inputs, outputs=attributes_outputs, name='attribute_submodel'))
-    ]
-
-
-def default_attributes_model(  # Used
-        num_attributes,
-        num_anchors,
-        pyramid_feature_size=256,
-        prior_probability=0.01,
-        classification_feature_size=256,
-        name='attributes_submodel'
-):
-    """ Creates the default regression submodel.
-    Args
-        num_attributes              : Number of attributes to predict a score for at each feature level.
-        num_anchors                 : Number of anchors to predict classification scores for at each feature level.
-        pyramid_feature_size        : The number of filters to expect from the feature pyramid levels.
-        classification_feature_size : The number of filters to use in the layers in the classification submodel.
-        name                        : The name of the submodel.
-    Returns
-        A keras.models.Model that predicts classes for each anchor.
-    """
-    options = {
-        'kernel_size': 3,
-        'strides': 1,
-        'padding': 'same',
-    }
-
-    inputs = keras.layers.Input(shape=(None, None, pyramid_feature_size))
-    outputs = inputs
-    for i in range(4):
-        outputs = keras.layers.Conv2D(
-            filters=classification_feature_size,
-            activation='relu',
-            name='pyramid_attribute_{}'.format(i),
-            kernel_initializer=keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
-            bias_initializer='zeros',
-            **options
-        )(outputs)
-
-    outputs = keras.layers.Conv2D(
-        filters=num_attributes * num_anchors,
-        kernel_initializer=keras.initializers.zeros(),
-        bias_initializer=initializers.PriorProbability(probability=prior_probability),
-        name='pyramid_classification',
-        **options
-    )(outputs)
-
-    # reshape output and apply sigmoid
-    outputs = keras.layers.Reshape((-1, num_attributes), name='pyramid_classification_reshape')(
-        outputs)  # [W*H*64A] -> [WHA, 64]
-    outputs = keras.layers.Activation('sigmoid', name='pyramid_attributes_sigmoid')(outputs)
-
-    return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
-
-
 def default_classification_model(
-        num_classes,
-        num_anchors,
-        pyramid_feature_size=256,
-        prior_probability=0.01,
-        classification_feature_size=256,
-        name='classification_submodel'
+    num_classes,
+    num_anchors,
+    pyramid_feature_size=256,
+    prior_probability=0.01,
+    classification_feature_size=256,
+    name='classification_submodel'
 ):
     """ Creates the default regression submodel.
 
@@ -192,12 +42,12 @@ def default_classification_model(
         A keras.models.Model that predicts classes for each anchor.
     """
     options = {
-        'kernel_size': 3,
-        'strides': 1,
-        'padding': 'same',
+        'kernel_size' : 3,
+        'strides'     : 1,
+        'padding'     : 'same',
     }
 
-    inputs = keras.layers.Input(shape=(None, None, pyramid_feature_size))
+    inputs  = keras.layers.Input(shape=(None, None, pyramid_feature_size))
     outputs = inputs
     for i in range(4):
         outputs = keras.layers.Conv2D(
@@ -224,8 +74,7 @@ def default_classification_model(
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
 
-def default_regression_model(num_anchors, pyramid_feature_size=256, regression_feature_size=256,
-                             name='regression_submodel'):
+def default_regression_model(num_anchors, pyramid_feature_size=256, regression_feature_size=256, name='regression_submodel'):
     """ Creates the default regression submodel.
 
     Args
@@ -241,14 +90,14 @@ def default_regression_model(num_anchors, pyramid_feature_size=256, regression_f
     # RetinaNet (classification) subnets are initialized
     # with bias b = 0 and a Gaussian weight fill with stddev = 0.01.
     options = {
-        'kernel_size': 3,
-        'strides': 1,
-        'padding': 'same',
-        'kernel_initializer': keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
-        'bias_initializer': 'zeros'
+        'kernel_size'        : 3,
+        'strides'            : 1,
+        'padding'            : 'same',
+        'kernel_initializer' : keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
+        'bias_initializer'   : 'zeros'
     }
 
-    inputs = keras.layers.Input(shape=(None, None, pyramid_feature_size))
+    inputs  = keras.layers.Input(shape=(None, None, pyramid_feature_size))
     outputs = inputs
     for i in range(4):
         outputs = keras.layers.Conv2D(
@@ -257,6 +106,7 @@ def default_regression_model(num_anchors, pyramid_feature_size=256, regression_f
             name='pyramid_regression_{}'.format(i),
             **options
         )(outputs)
+
     outputs = keras.layers.Conv2D(num_anchors * 4, name='pyramid_regression', **options)(outputs)
     outputs = keras.layers.Reshape((-1, 4), name='pyramid_regression_reshape')(outputs)
 
@@ -276,15 +126,15 @@ def __create_pyramid_features(C3, C4, C5, feature_size=256):
         A list of feature levels [P3, P4, P5, P6, P7].
     """
     # upsample C5 to get P5 from the FPN paper
-    P5 = keras.layers.Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C5_reduced')(C5)
+    P5           = keras.layers.Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C5_reduced')(C5)
     P5_upsampled = layers.UpsampleLike(name='P5_upsampled')([P5, C4])
-    P5 = keras.layers.Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P5')(P5)
+    P5           = keras.layers.Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P5')(P5)
 
     # add P5 elementwise to C4
-    P4 = keras.layers.Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C4_reduced')(C4)
-    P4 = keras.layers.Add(name='P4_merged')([P5_upsampled, P4])
+    P4           = keras.layers.Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C4_reduced')(C4)
+    P4           = keras.layers.Add(name='P4_merged')([P5_upsampled, P4])
     P4_upsampled = layers.UpsampleLike(name='P4_upsampled')([P4, C3])
-    P4 = keras.layers.Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P4')(P4)
+    P4           = keras.layers.Conv2D(feature_size, kernel_size=3, strides=1, padding='same', name='P4')(P4)
 
     # add P4 elementwise to C3
     P3 = keras.layers.Conv2D(feature_size, kernel_size=1, strides=1, padding='same', name='C3_reduced')(C3)
@@ -310,12 +160,11 @@ class AnchorParameters:
         ratios  : List of ratios to use per location in a feature map.
         scales  : List of scales to use per location in a feature map.
     """
-
     def __init__(self, sizes, strides, ratios, scales):
-        self.sizes = sizes
+        self.sizes   = sizes
         self.strides = strides
-        self.ratios = ratios
-        self.scales = scales
+        self.ratios  = ratios
+        self.scales  = scales
 
     def num_anchors(self):
         return len(self.ratios) * len(self.scales)
@@ -325,10 +174,10 @@ class AnchorParameters:
 The default anchor parameters.
 """
 AnchorParameters.default = AnchorParameters(
-    sizes=[32, 64, 128, 256, 512],
-    strides=[8, 16, 32, 64, 128],
-    ratios=np.array([0.5, 1, 2], keras.backend.floatx()),
-    scales=np.array([2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)], keras.backend.floatx()),
+    sizes   = [32, 64, 128, 256, 512],
+    strides = [8, 16, 32, 64, 128],
+    ratios  = np.array([0.5, 1, 2], keras.backend.floatx()),
+    scales  = np.array([2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)], keras.backend.floatx()),
 )
 
 
@@ -406,14 +255,13 @@ def __build_anchors(anchor_parameters, features):
 
 
 def retinanet(
-        inputs,
-        backbone_layers,
-        num_classes,
-        num_attributes=None,
-        num_anchors=9,
-        create_pyramid_features=__create_pyramid_features,
-        submodels=None,
-        name='retinanet'
+    inputs,
+    backbone_layers,
+    num_classes,
+    num_anchors             = 9,
+    create_pyramid_features = __create_pyramid_features,
+    submodels               = None,
+    name                    = 'retinanet'
 ):
     """ Construct a RetinaNet model on top of a backbone.
 
@@ -437,40 +285,26 @@ def retinanet(
         ]
         ```
     """
-
     if submodels is None:
-        # submodels = default_submodels(num_classes, num_anchors)
-        submodels = build_submodels(num_classes=num_classes, num_attributes=num_attributes, num_anchors=num_anchors)
-    #name, model = submodels[2]  # Get attributes submodel
+        submodels = default_submodels(num_classes, num_anchors)
 
     C3, C4, C5 = backbone_layers
 
     # compute pyramid features as per https://arxiv.org/abs/1708.02002
     features = create_pyramid_features(C3, C4, C5)
-    '''
-    attribute_features = []
-    output = []
-    for f in features:
-        feat, out = model(f)
-        attribute_features.append(feat)
-        output.append(out)
 
-    attributes = keras.layers.Concatenate(axis=1, name='attributes')(output)
-    '''
     # for all pyramid levels, run available submodels
     pyramids = __build_pyramid(submodels, features)
-    model = keras.models.Model(inputs=inputs, outputs=pyramids, name=name)
-    from keras.utils import plot_model
-    plot_model(model, to_file='demo.png', show_shapes=True)
-    return model
+
+    return keras.models.Model(inputs=inputs, outputs=pyramids, name=name)
 
 
 def retinanet_bbox(
-        model=None,
-        anchor_parameters=AnchorParameters.default,
-        nms=True,
-        name='retinanet-bbox',
-        **kwargs
+    model             = None,
+    anchor_parameters = AnchorParameters.default,
+    nms               = True,
+    name              = 'retinanet-bbox',
+    **kwargs
 ):
     """ Construct a RetinaNet model on top of a backbone and adds convenience functions to output boxes directly.
 
@@ -498,10 +332,10 @@ def retinanet_bbox(
 
     # compute the anchors
     features = [model.get_layer(p_name).output for p_name in ['P3', 'P4', 'P5', 'P6', 'P7']]
-    anchors = __build_anchors(anchor_parameters, features)
+    anchors  = __build_anchors(anchor_parameters, features)
 
     # we expect the anchors, regression and classification values as first output
-    regression = model.outputs[0]
+    regression     = model.outputs[0]
     classification = model.outputs[1]
 
     # "other" can be any additional output from custom submodels, by default this will be []

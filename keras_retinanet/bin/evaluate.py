@@ -81,7 +81,7 @@ def parse_args(args):
     """
     parser     = argparse.ArgumentParser(description='Evaluation script for a RetinaNet network.')
     subparsers = parser.add_subparsers(help='Arguments for specific dataset types.', dest='dataset_type')
-    # subparsers.required = True
+    subparsers.required = True
 
     coco_parser = subparsers.add_parser('coco')
     coco_parser.add_argument('coco_path', help='Path to dataset directory (ie. /tmp/COCO).')
@@ -93,7 +93,7 @@ def parse_args(args):
     csv_parser.add_argument('annotations', help='Path to CSV file containing annotations for evaluation.')
     csv_parser.add_argument('classes', help='Path to a CSV file containing class label mapping.')
 
-    parser.add_argument('--model',             help='Path to RetinaNet model.')
+    parser.add_argument('model',             help='Path to RetinaNet model.')
     parser.add_argument('--convert-model',   help='Convert the model to an inference model (ie. the input is a training model).', action='store_true')
     parser.add_argument('--backbone',        help='The backbone of the model.', default='resnet50')
     parser.add_argument('--gpu',             help='Id of the GPU to use (as reported by nvidia-smi).')
@@ -113,13 +113,6 @@ def main(args=None):
         args = sys.argv[1:]
     args = parse_args(args)
 
-    # args.dataset_type = 'coco'
-    # args.coco_path = '../../datasets/coco'
-    # args.coco_path = 'E:\Research\VQA\VQA Dataset\coco'
-    args.dataset_type = 'pascal'
-    args.pascal_path = '../../apascal/VOC2008'
-    args.model = os.path.join('snapshots', 'resnet50_pascal_05.h5')
-
     # make sure keras is the minimum required version
     check_keras_version()
 
@@ -137,7 +130,7 @@ def main(args=None):
 
     # load the model
     print('Loading model, this may take a second...')
-    model = models.load_model(args.model, backbone_name=args.backbone, convert=True)
+    model = models.load_model(args.model, backbone_name=args.backbone, convert=args.convert_model)
 
     # print model summary
     # print(model.summary())
@@ -162,7 +155,7 @@ def main(args=None):
         for label, (average_precision, num_annotations) in average_precisions.items():
             print('{:.0f} instances of class'.format(num_annotations),
                   generator.label_to_name(label), 'with average precision: {:.4f}'.format(average_precision))
-            if(average_precision > 0):
+            if(average_precision[1] > 0):
                 present_classes += 1
                 precision       += average_precision
         print('mAP: {:.4f}'.format(precision / present_classes))
