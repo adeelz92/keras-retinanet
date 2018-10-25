@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 /.pytest_cache
 /.cache
+*.xml
+*.iml
+*.h5
+*.py
+*.py
+keras_retinanet/bin/evaluate.py
+keras_retinanet/bin/train.py
+keras_retinanet/bin/evaluate.py
