@@ -176,6 +176,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
                 '{backbone}_{dataset_type}_{{epoch:02d}}.h5'.format(backbone=args.backbone, dataset_type=args.dataset_type)
             ),
             verbose=1,
+            period=5,
             # save_best_only=True,
             # monitor="mAP",
             # mode='max'
@@ -240,7 +241,7 @@ def create_generators(args):
     elif args.dataset_type == 'pascal':
         train_generator = PascalVocGenerator(
             args.pascal_path,
-            'trainval',
+            'train',
             transform_generator=transform_generator,
             batch_size=args.batch_size,
             image_min_side=args.image_min_side,
@@ -249,7 +250,7 @@ def create_generators(args):
 
         validation_generator = PascalVocGenerator(
             args.pascal_path,
-            'test',
+            'val',
             batch_size=args.batch_size,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side
@@ -358,7 +359,7 @@ def parse_args(args):
     """
     parser     = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
     subparsers = parser.add_subparsers(help='Arguments for specific dataset types.', dest='dataset_type')
-    subparsers.required = True
+    #subparsers.required = True
 
     coco_parser = subparsers.add_parser('coco')
     coco_parser.add_argument('coco_path', help='Path to dataset directory (ie. /tmp/COCO).')
@@ -390,7 +391,7 @@ def parse_args(args):
     group.add_argument('--weights',           help='Initialize the model with weights from a file.')
     group.add_argument('--no-weights',        help='Don\'t initialize the model with any weights.', dest='imagenet_weights', action='store_const', const=False)
 
-    parser.add_argument('--backbone',        help='Backbone model used by retinanet.', default='resnet50', type=str)
+    parser.add_argument('--backbone',        help='Backbone model used by retinanet.', default='resnet152', type=str)
     parser.add_argument('--batch-size',      help='Size of the batches.', default=1, type=int)
     parser.add_argument('--gpu',             help='Id of the GPU to use (as reported by nvidia-smi).')
     parser.add_argument('--multi-gpu',       help='Number of GPUs to use for parallel processing.', type=int, default=0)
@@ -415,6 +416,9 @@ def main(args=None):
         args = sys.argv[1:]
     args = parse_args(args)
 
+    args.dataset_type = 'pascal'
+    args.pascal_path = '../../apascal/VOC2008'
+
     # create object that stores backbone information
     backbone = models.backbone(args.backbone)
 
@@ -428,7 +432,7 @@ def main(args=None):
 
     # create the generators
     train_generator, validation_generator = create_generators(args)
-
+    args.snapshot = 'snapshots/resnet152_pascal_15_old.h5'
     # create the model
     if args.snapshot is not None:
         print('Loading model, this may take a second...')

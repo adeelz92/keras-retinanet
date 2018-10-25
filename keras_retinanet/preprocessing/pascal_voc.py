@@ -91,7 +91,7 @@ class PascalVocGenerator(Generator):
         self.data_dir             = data_dir
         self.set_name             = set_name
         self.classes              = classes
-        self.image_names          = [l.strip().split(None, 1)[0] for l in open(os.path.join(data_dir, 'ImageSets', 'Main', set_name + '.txt')).readlines()]
+        self.image_names          = [l.strip().split(None, 1)[0] for l in open(os.path.join(data_dir, 'ImageSets', 'Layout', set_name + '.txt')).readlines()]
         self.image_extension      = image_extension
         self.skip_truncated       = skip_truncated
         self.skip_difficult       = skip_difficult
@@ -149,10 +149,10 @@ class PascalVocGenerator(Generator):
         box[0, 4] = self.name_to_label(class_name)
 
         bndbox    = _findNode(element, 'bndbox')
-        box[0, 0] = _findNode(bndbox, 'xmin', 'bndbox.xmin', parse=float) - 1
-        box[0, 1] = _findNode(bndbox, 'ymin', 'bndbox.ymin', parse=float) - 1
-        box[0, 2] = _findNode(bndbox, 'xmax', 'bndbox.xmax', parse=float) - 1
-        box[0, 3] = _findNode(bndbox, 'ymax', 'bndbox.ymax', parse=float) - 1
+        box[0, 0] = _findNode(bndbox, 'xmin', 'bndbox.xmin', parse=float)
+        box[0, 1] = _findNode(bndbox, 'ymin', 'bndbox.ymin', parse=float)
+        box[0, 2] = _findNode(bndbox, 'xmax', 'bndbox.xmax', parse=float)
+        box[0, 3] = _findNode(bndbox, 'ymax', 'bndbox.ymax', parse=float)
 
         return truncated, difficult, box
 
@@ -179,9 +179,10 @@ class PascalVocGenerator(Generator):
         """
         filename = self.image_names[image_index] + '.xml'
         try:
-            tree = ET.parse(os.path.join(self.data_dir, 'Annotations', filename))
+            tree = ET.parse(os.path.join(self.data_dir, 'xml', filename))
             return self.__parse_annotations(tree.getroot())
         except ET.ParseError as e:
             raise_from(ValueError('invalid annotations file: {}: {}'.format(filename, e)), None)
         except ValueError as e:
             raise_from(ValueError('invalid annotations file: {}: {}'.format(filename, e)), None)
+
