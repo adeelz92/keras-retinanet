@@ -2,3 +2,10 @@ __pycache__/
 *.pyc
 /.pytest_cache
 /.cache
+.idea/deployment.xml
+.idea/keras-retinanet.iml
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
+.idea/workspace.xml
+*.h5
